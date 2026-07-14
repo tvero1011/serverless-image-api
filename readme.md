@@ -1,64 +1,186 @@
-# Serverless Image Upload API
+# Serverless Image API on AWS
 
-A lightweight serverless API for uploading images, storing them in S3, and saving metadata in DynamoDB. Built using AWS Free Tier-compatible services.
+![AWS](https://img.shields.io/badge/AWS-Cloud-FF9900?logo=amazonaws)
+![Terraform](https://img.shields.io/badge/Terraform-IaC-623CE4?logo=terraform)
+![Node.js](https://img.shields.io/badge/Node.js-18-339933?logo=node.js)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-## Features
+Hands-on serverless application demonstrating Infrastructure as Code (IaC) with Terraform and AWS serverless services.
 
-- POST `/upload` → Upload image (base64) to S3
-- DynamoDB stores metadata: `imageId` and `uploadedAt`
-- Fully serverless: Lambda + API Gateway + S3 + DynamoDB
-- Cost-friendly, free-tier compatible
-- Demo-ready for portfolio
+---
 
-## Architecture
+# Overview
 
-![Architecture Diagram](./docs/architecture-diagram.png)
+Serverless Image API is a cloud engineering project that demonstrates how to provision and deploy a serverless image upload application on AWS using Terraform.
 
-## Technologies
+The project provisions cloud infrastructure through Infrastructure as Code while exposing a REST API that allows users to upload images. Uploaded files are stored in Amazon S3, metadata is persisted in Amazon DynamoDB, and application execution is monitored using Amazon CloudWatch Logs.
 
-- AWS Lambda (Node.js 18)
-- AWS API Gateway
-- AWS S3
-- AWS DynamoDB
-- AWS IAM & CloudWatch
-- Terraform (optional infrastructure automation)
+The objective of this project is to strengthen practical experience with AWS serverless architecture, Infrastructure as Code, and cloud-native application development.
 
-## Installation & Deployment
+---
 
-1. Clone repository
-```bash
-git clone https://github.com/<your-username>/serverless-image-api.git
-cd serverless-image-api
+# Solution Architecture
 
-2. Install dependencies (Lambda code)
-cd lambda
-npm init -y
-npm install aws-sdk
+```text
+                    Client
+                       │
+                       ▼
+              Amazon API Gateway
+                       │
+                       ▼
+                AWS Lambda Function
+                       │
+         ┌─────────────┴─────────────┐
+         ▼                           ▼
+   Amazon S3                  Amazon DynamoDB
+ Image Storage               Image Metadata
 
+                       │
+                       ▼
+             Amazon CloudWatch Logs
 
-3. Deploy manually:
-Create S3 bucket (free tier)
-Create DynamoDB table ImageMetadata (on-demand)
-Create IAM role for Lambda
-Create Lambda function UploadImageLambda and upload uploadImage.js
-Connect API Gateway POST /upload → Lambda
+────────────────────────────────────────────
 
-4. Optional Terraform deployment:
-cd terraform
-terraform init
-terraform apply
+Infrastructure Provisioned with Terraform
 
-5. Testing (CLI - powershell)
-curl -X POST https://<api-id>.execute-api.us-east-1.amazonaws.com/prod/upload \
--H "Content-Type: application/json" \
--d '{"name":"test.png","data":"<base64-encoded-data>"}'
+• Amazon API Gateway
+• AWS Lambda
+• Amazon S3
+• Amazon DynamoDB
+• IAM Roles & Policies
+• Amazon CloudWatch Logs
+```
 
-Check S3 bucket for uploaded file and DynamoDB for metadata.
+*A visual AWS architecture diagram will be added in a future update.*
 
-6. Cleanup (Free Tier)
-After demo/testing:
-Delete S3 bucket
-Delete DynamoDB table
-Delete Lambda function
-Delete API Gateway
-This ensures zero AWS cost.
+---
+
+# AWS Services Used
+
+- AWS Lambda
+- Amazon API Gateway
+- Amazon S3
+- Amazon DynamoDB
+- IAM Roles & Policies
+- Amazon CloudWatch Logs
+
+---
+
+# Technologies
+
+- Terraform
+- AWS
+- Node.js
+- JavaScript
+- REST API
+- Git
+- GitHub
+
+---
+
+# Key Features
+
+- Infrastructure provisioned entirely with Terraform
+- Serverless REST API using Amazon API Gateway
+- Image upload processing with AWS Lambda
+- Object storage using Amazon S3
+- Metadata persistence with Amazon DynamoDB
+- IAM least-privilege access control
+- Centralized application logging with Amazon CloudWatch Logs
+- Simple frontend for testing API functionality
+
+---
+
+# Repository Structure
+
+```text
+serverless-image-api
+│
+├── docs/
+│   ├── diagram.md
+│   └── notes.md
+│
+├── frontend/
+│   └── index.html
+│
+├── lambda/
+│   ├── uploadimage.js
+│   ├── utils.js
+│   └── uploadimage.zip
+│
+├── terraform/
+│   ├── main.tf
+│   ├── provider.tf
+│   ├── variables.tf
+│   ├── outputs.tf
+│   └── .terraform.lock.hcl
+│
+├── .gitignore
+└── README.md
+```
+
+---
+
+# Skills Demonstrated
+
+- Infrastructure as Code (IaC)
+- Terraform
+- AWS Lambda
+- Amazon API Gateway
+- Amazon S3
+- Amazon DynamoDB
+- IAM
+- REST API Development
+- Serverless Architecture
+- Cloud Automation
+- Version Control
+
+---
+
+# Project Status
+
+This project was developed as a hands-on cloud engineering exercise to strengthen practical experience with AWS serverless services and Infrastructure as Code.
+
+The repository demonstrates how cloud infrastructure and application components can be provisioned, managed, and version-controlled using Terraform while applying AWS serverless architectural best practices.
+
+---
+
+# Lessons Learned
+
+Through this project I gained practical experience with:
+
+- Designing serverless applications on AWS
+- Provisioning infrastructure using Terraform
+- Developing AWS Lambda functions with Node.js
+- Building REST APIs using Amazon API Gateway
+- Managing object storage with Amazon S3
+- Persisting application metadata using Amazon DynamoDB
+- Configuring IAM roles following least-privilege principles
+- Monitoring serverless applications using Amazon CloudWatch Logs
+
+---
+
+# Future Enhancements
+
+- Professional AWS architecture diagram
+- Image resizing and thumbnail generation
+- File validation and size restrictions
+- Authentication using Amazon Cognito
+- GitHub Actions CI/CD pipeline
+- CloudFront integration for content delivery
+
+---
+
+# Author
+
+**Rovert Pangan**
+
+AWS Certified Solutions Architect – Associate
+
+Cloud Engineer | Automation Engineer
+
+---
+
+## License
+
+This project is licensed under the MIT License.

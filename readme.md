@@ -1,8 +1,6 @@
-# Serverless Image API on AWS
-
 ![AWS](https://img.shields.io/badge/AWS-Cloud-FF9900?logo=amazonaws)
 ![Terraform](https://img.shields.io/badge/Terraform-IaC-623CE4?logo=terraform)
-![Node.js](https://img.shields.io/badge/Node.js-18-339933?logo=node.js)
+![Node.js](https://img.shields.io/badge/Node.js-22-339933?logo=node.js)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 Hands-on serverless application demonstrating Infrastructure as Code (IaC) with Terraform and AWS serverless services.
@@ -13,174 +11,93 @@ Hands-on serverless application demonstrating Infrastructure as Code (IaC) with 
 
 Serverless Image API is a cloud engineering project that demonstrates how to provision and deploy a serverless image upload application on AWS using Terraform.
 
-The project provisions cloud infrastructure through Infrastructure as Code while exposing a REST API that allows users to upload images. Uploaded files are stored in Amazon S3, metadata is persisted in Amazon DynamoDB, and application execution is monitored using Amazon CloudWatch Logs.
+A static web page (S3) sends an image to an API (API Gateway). A Lambda function validates it, stores the file in a private S3 bucket, and saves its metadata in DynamoDB. One `terraform apply` builds everything, and `terraform destroy` removes it.
 
-The objective of this project is to strengthen practical experience with AWS serverless architecture, Infrastructure as Code, and cloud-native application development.
+**Stack:** S3, API Gateway (REST), Lambda (Node.js 22), DynamoDB (on-demand), IAM, CloudWatch Logs, Terraform.
 
 ---
 
-# Solution Architecture
+# Architecture
 
-```text
-                    Client
-                       │
-                       ▼
-              Amazon API Gateway
-                       │
-                       ▼
-                AWS Lambda Function
-                       │
-         ┌─────────────┴─────────────┐
-         ▼                           ▼
-   Amazon S3                  Amazon DynamoDB
- Image Storage               Image Metadata
-
-                       │
-                       ▼
-             Amazon CloudWatch Logs
-
-────────────────────────────────────────────
-
-Infrastructure Provisioned with Terraform
-
-• Amazon API Gateway
-• AWS Lambda
-• Amazon S3
-• Amazon DynamoDB
-• IAM Roles & Policies
-• Amazon CloudWatch Logs
+```mermaid
+flowchart LR
+  B[Browser<br/>index.html on S3 website] -->|1. OPTIONS preflight| A[API Gateway REST<br/>/upload]
+  B -->|2. POST JSON base64| A
+  A -->|AWS_PROXY| L[Lambda upload_fn]
+  L -->|PutObject| S[(S3 images bucket<br/>private)]
+  L -->|PutItem| D[(DynamoDB<br/>ImageMetadata)]
+  L -.->|logs| C[CloudWatch Logs]
 ```
 
-*A visual AWS architecture diagram will be added in a future update.*
+1. The browser sends an `OPTIONS /upload` CORS preflight. API Gateway answers it with a MOCK integration.
+2. The browser sends `POST /upload` with JSON `{ image (base64), fileName, contentType }`.
+3. Lambda validates the input, saves `uploads/<uuid>.<ext>` to S3, and writes metadata to DynamoDB.
+4. Lambda returns `{ message, imageId }` with CORS headers.
 
 ---
 
-# AWS Services Used
+# Project structure
 
-- AWS Lambda
-- Amazon API Gateway
-- Amazon S3
-- Amazon DynamoDB
-- IAM Roles & Policies
-- Amazon CloudWatch Logs
-
----
-
-# Technologies
-
-- Terraform
-- AWS
-- Node.js
-- JavaScript
-- REST API
-- Git
-- GitHub
-
----
-
-# Key Features
-
-- Infrastructure provisioned entirely with Terraform
-- Serverless REST API using Amazon API Gateway
-- Image upload processing with AWS Lambda
-- Object storage using Amazon S3
-- Metadata persistence with Amazon DynamoDB
-- IAM least-privilege access control
-- Centralized application logging with Amazon CloudWatch Logs
-- Simple frontend for testing API functionality
-
----
-
-# Repository Structure
-
-```text
-serverless-image-api
-│
-├── docs/
-│   ├── diagram.md
-│   └── notes.md
-│
-├── frontend/
-│   └── index.html
-│
-├── lambda/
-│   ├── uploadimage.js
-│   ├── utils.js
-│   └── uploadimage.zip
-│
-├── terraform/
-│   ├── main.tf
-│   ├── provider.tf
-│   ├── variables.tf
-│   ├── outputs.tf
-│   └── .terraform.lock.hcl
-│
-├── .gitignore
-└── README.md
+```
+terraform/   main.tf, variables.tf, outputs.tf, provider.tf
+lambda/      uploadimage.js        (function code, zipped by Terraform)
+frontend/    index.html.tpl        (template: Terraform injects the API URL)
+docs/        architecture.md
 ```
 
 ---
 
-# Skills Demonstrated
+# Deploy
 
-- Infrastructure as Code (IaC)
-- Terraform
-- AWS Lambda
-- Amazon API Gateway
-- Amazon S3
-- Amazon DynamoDB
-- IAM
-- REST API Development
-- Serverless Architecture
-- Cloud Automation
-- Version Control
+Prerequisites: Terraform >= 1.5 and an AWS CLI profile (the default profile name is `tf-dev`).
 
----
+```bash
+git clone https://github.com/tvero1011/serverless-image-api.git
+cd serverless-image-api/terraform
+terraform init
+terraform apply -var="aws_profile=YOUR_PROFILE"
+```
 
-# Project Status
+S3 bucket names are globally unique. If you get `BucketAlreadyExists`, pass your own:
+`-var="frontend_bucket_name=..." -var="images_bucket_name=..."`
 
-This project was developed as a hands-on cloud engineering exercise to strengthen practical experience with AWS serverless services and Infrastructure as Code.
-
-The repository demonstrates how cloud infrastructure and application components can be provisioned, managed, and version-controlled using Terraform while applying AWS serverless architectural best practices.
+Terraform prints `frontend_url` (open it in a browser) and `api_gateway_url`.
 
 ---
 
-# Lessons Learned
+# Test the API
 
-Through this project I gained practical experience with:
+```bash
+curl -X POST "<api_gateway_url>" \
+  -H "Content-Type: application/json" \
+  -d '{"image":"<base64>","fileName":"test.png","contentType":"image/png"}'
+```
 
-- Designing serverless applications on AWS
-- Provisioning infrastructure using Terraform
-- Developing AWS Lambda functions with Node.js
-- Building REST APIs using Amazon API Gateway
-- Managing object storage with Amazon S3
-- Persisting application metadata using Amazon DynamoDB
-- Configuring IAM roles following least-privilege principles
-- Monitoring serverless applications using Amazon CloudWatch Logs
+On Windows PowerShell use `curl.exe` (plain `curl` is an alias for `Invoke-WebRequest` and rejects `-X`).
+Then check S3 for `uploads/...` and DynamoDB for the metadata item.
 
 ---
 
-# Future Enhancements
+# Design decisions
 
-- Professional AWS architecture diagram
-- Image resizing and thumbnail generation
-- File validation and size restrictions
-- Authentication using Amazon Cognito
-- GitHub Actions CI/CD pipeline
-- CloudFront integration for content delivery
-
----
-
-# Author
-
-**Rovert Pangan**
-
-AWS Certified Solutions Architect – Associate
-
-Cloud Engineer | Automation Engineer
+- **Max image size 4 MB:** Lambda accepts 6 MB request payloads and base64 adds about 33%.
+- **Validation:** allow-listed image types, size cap, server-generated UUID keys (no overwrites, no path tricks).
+- **Least-privilege IAM:** the Lambda can only `PutObject` on the images bucket, `PutItem` on the table, and write its own logs.
+- **Private images bucket:** all public access blocked. Only the frontend bucket is public.
+- **Throttling:** 5 requests/second (burst 10) on the API stage.
+- **Deployment order:** `create_before_destroy` on the API deployment avoids the "active stages" deadlock.
 
 ---
 
-## License
+# Cleanup
 
-This project is licensed under the MIT License.
+```bash
+terraform destroy -var="aws_profile=YOUR_PROFILE"
+```
+
+---
+
+# Known limitations and next steps
+
+The API is public (no authentication) and the frontend is HTTP only. Planned improvements: presigned-URL uploads,
+CloudFront + HTTPS, API key or Cognito auth, remote Terraform state, GitHub Actions CI/CD, CloudWatch alarms, tests.

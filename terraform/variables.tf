@@ -1,37 +1,48 @@
-#############################################################
-# Terraform Variables for Image Upload Project
-#############################################################
-
 variable "region" {
-  description = "The AWS region where resources will be created"
+  description = "AWS region where everything is created"
   type        = string
   default     = "us-east-1"
 }
 
-# Prefix for S3 bucket storing uploaded images
-variable "s3_bucket_prefix" {
-  description = "Prefix for the images S3 bucket"
+variable "aws_profile" {
+  description = "Local AWS CLI profile Terraform uses to authenticate"
   type        = string
-  default     = "my-images-bucket"
+  default     = "tf-dev"
 }
 
-# Prefix for S3 bucket hosting the frontend website
-variable "frontend_bucket_prefix" {
-  description = "Prefix for the frontend S3 bucket"
+variable "project_name" {
+  description = "Prefix used to name IAM roles, API, etc."
   type        = string
-  default     = "my-frontend-bucket"
+  default     = "image-upload"
 }
 
-# DynamoDB table name
+# S3 bucket names are GLOBALLY unique across all AWS accounts.
+variable "frontend_bucket_name" {
+  description = "Globally unique name of the bucket hosting index.html"
+  type        = string
+  default     = "rovnp-portfolio-frontend-9921"
+}
+
+variable "images_bucket_name" {
+  description = "Globally unique name of the bucket storing uploaded images"
+  type        = string
+  default     = "my-portfolio-images-2026-unique-rovnp"
+}
+
 variable "dynamodb_table_name" {
-  description = "Name of the DynamoDB table storing image metadata"
+  description = "DynamoDB table storing image metadata"
   type        = string
   default     = "ImageMetadata"
 }
 
-# Lambda function name
 variable "lambda_function_name" {
-  description = "Name of the Lambda function handling image uploads"
+  description = "Name of the upload Lambda function"
   type        = string
-  default     = "upload_image"
+  default     = "upload_fn"
+}
+
+variable "max_image_bytes" {
+  description = "Max decoded image size. Lambda's 6 MB request limit and base64's ~33% overhead mean ~4 MB is the safe ceiling."
+  type        = number
+  default     = 4194304
 }

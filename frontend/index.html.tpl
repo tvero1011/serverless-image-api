@@ -16,56 +16,51 @@
 
 <div class="card">
     <h2>Cloud Image Uploader</h2>
-    <input type="file" id="fileInput" accept="image/*" />
+    <input type="file" id="fileInput" accept="image/png,image/jpeg,image/gif,image/webp" />
     <button id="uploadBtn">Upload to AWS</button>
     <div id="status"></div>
 </div>
 
 <script>
-    const API_URL = "https://7jlibxlkej.execute-api.us-east-1.amazonaws.com/prod/upload";
+    // Terraform replaces the placeholder below with the real API URL (templatefile).
+    const API_URL = "${api_url}";
+    const MAX_BYTES = 4 * 1024 * 1024; // keep in sync with the Lambda MAX_IMAGE_BYTES
     const uploadBtn = document.getElementById("uploadBtn");
     const statusDiv = document.getElementById("status");
+
+    function show(text, color) {
+        statusDiv.innerText = text;
+        statusDiv.style.color = color;
+    }
 
     uploadBtn.onclick = async () => {
         const file = document.getElementById("fileInput").files[0];
         if (!file) return alert("Please select a file first!");
+        if (file.size > MAX_BYTES) return show("File is larger than 4 MB", "red");
 
-        // UI Feedback
         uploadBtn.disabled = true;
-        statusDiv.innerText = "Uploading to S3...";
-        statusDiv.style.color = "blue";
+        show("Uploading to S3...", "blue");
 
         const reader = new FileReader();
         reader.readAsDataURL(file);
 
         reader.onload = async () => {
-            // Get the base64 string and strip the prefix (data:image/png;base64,)
-            const base64 = reader.result.split(',')[1]; 
+            // Strip the "data:image/png;base64," prefix, keep only the base64 part
+            const base64 = reader.result.split(",")[1];
 
             try {
                 const res = await fetch(API_URL, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ 
-                        image: base64,       // Matches Lambda 'body.image'
-                        fileName: file.name, // Matches Lambda 'body.fileName'
-                        contentType: file.type 
-                    })
+                    body: JSON.stringify({ image: base64, fileName: file.name, contentType: file.type })
                 });
-
                 const json = await res.json();
 
-                if (res.ok) {
-                    statusDiv.innerText = "✅ Success! Image saved in S3.";
-                    statusDiv.style.color = "green";
-                    console.log("Response:", json);
-                } else {
-                    throw new Error(json.error || "Server error");
-                }
+                if (!res.ok) throw new Error(json.error || "Server error");
+                show("Success! Image saved. ID: " + json.imageId, "green");
             } catch (err) {
                 console.error("Upload Error:", err);
-                statusDiv.innerText = "❌ Upload failed: " + err.message;
-                statusDiv.style.color = "red";
+                show("Upload failed: " + err.message, "red");
             } finally {
                 uploadBtn.disabled = false;
             }

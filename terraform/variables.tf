@@ -46,3 +46,15 @@ variable "max_image_bytes" {
   type        = number
   default     = 4194304
 }
+
+variable "list_lambda_function_name" {
+  description = "Name of the GET /images Lambda function"
+  type        = string
+  default     = "list_images_fn"
+}
+
+variable "images_page_size" {
+  description = "Default number of images returned per GET /images call (client can override with ?limit=, capped at 50 in the Lambda)"
+  type        = number
+  default     = 20
+}

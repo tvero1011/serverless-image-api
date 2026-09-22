@@ -40,7 +40,8 @@ resource "aws_s3_bucket_policy" "frontend_public_read" {
 # so nobody ever copy-pastes the URL by hand again.
 locals {
   index_html = templatefile("${path.module}/../frontend/index.html.tpl", {
-    api_url = "${aws_api_gateway_stage.prod.invoke_url}/upload"
+    api_url          = "${aws_api_gateway_stage.prod.invoke_url}/upload"
+    list_images_url  = "${aws_api_gateway_stage.prod.invoke_url}/images"
   })
 }
 
@@ -160,6 +161,85 @@ resource "aws_lambda_function" "fn" {
 }
 
 ############################
+# 3b. THE LIST LOGIC (read-only Lambda + IAM + logs)
+############################
+# Separate function AND separate role from the upload Lambda, on purpose:
+# this one only ever reads. It should never be able to write S3 or DynamoDB,
+# even if its code has a bug.
+
+resource "aws_cloudwatch_log_group" "lambda_list" {
+  name              = "/aws/lambda/${var.list_lambda_function_name}"
+  retention_in_days = 14
+}
+
+resource "aws_iam_role" "lambda_list" {
+  name = "${var.project_name}-lambda-list-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "lambda_list" {
+  name = "${var.project_name}-lambda-list-policy"
+  role = aws_iam_role.lambda_list.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["dynamodb:Scan"]
+        Resource = aws_dynamodb_table.db.arn
+      },
+      {
+        # Only needed to mint presigned URLs; no object bytes ever pass through this Lambda.
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = "${aws_s3_bucket.images.arn}/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "${aws_cloudwatch_log_group.lambda_list.arn}:*"
+      }
+    ]
+  })
+}
+
+data "archive_file" "lambda_list_zip" {
+  type        = "zip"
+  source_file = "${path.module}/../lambda/listimages.js"
+  output_path = "${path.module}/listimages.zip"
+}
+
+resource "aws_lambda_function" "list_fn" {
+  function_name    = var.list_lambda_function_name
+  role             = aws_iam_role.lambda_list.arn
+  handler          = "listimages.handler"
+  runtime          = "nodejs22.x"
+  timeout          = 10
+  memory_size      = 256
+  filename         = data.archive_file.lambda_list_zip.output_path
+  source_code_hash = data.archive_file.lambda_list_zip.output_base64sha256
+
+  environment {
+    variables = {
+      BUCKET_NAME = aws_s3_bucket.images.bucket
+      TABLE_NAME  = aws_dynamodb_table.db.name
+      PAGE_SIZE   = tostring(var.images_page_size)
+    }
+  }
+
+  depends_on = [aws_cloudwatch_log_group.lambda_list, aws_iam_role_policy.lambda_list]
+}
+
+############################
 # 4. THE API (API Gateway REST + CORS)
 ############################
 
@@ -244,6 +324,48 @@ resource "aws_lambda_permission" "apigw" {
   source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/POST/upload"
 }
 
+# --- GET /images -> list_fn (proxy integration)
+resource "aws_api_gateway_resource" "images" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  parent_id   = aws_api_gateway_rest_api.api.root_resource_id
+  path_part   = "images"
+}
+
+resource "aws_api_gateway_method" "list_get" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.images.id
+  http_method   = "GET"
+  authorization = "NONE" # public on purpose for the demo; see handbook "known gaps"
+
+  # ?limit=<n>&cursor=<opaque string> for pagination; both are optional.
+  request_parameters = {
+    "method.request.querystring.limit"  = false
+    "method.request.querystring.cursor" = false
+  }
+}
+
+resource "aws_api_gateway_integration" "list_lambda" {
+  rest_api_id             = aws_api_gateway_rest_api.api.id
+  resource_id             = aws_api_gateway_resource.images.id
+  http_method             = aws_api_gateway_method.list_get.http_method
+  integration_http_method = "POST" # API GW always calls Lambda with POST, even for a GET route
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.list_fn.invoke_arn
+}
+
+# No OPTIONS/MOCK here: a plain GET with no custom headers and no body is a
+# CORS "simple request", so the browser never sends a preflight for it. The
+# Access-Control-Allow-Origin header the Lambda itself returns is enough.
+# (Contrast with POST /upload, which sends application/json and DOES preflight.)
+
+resource "aws_lambda_permission" "apigw_list" {
+  statement_id  = "AllowAPIGatewayInvokeList"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.list_fn.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/GET/images"
+}
+
 # --- Deployment + Stage
 resource "aws_api_gateway_deployment" "deploy" {
   rest_api_id = aws_api_gateway_rest_api.api.id
@@ -258,7 +380,10 @@ resource "aws_api_gateway_deployment" "deploy" {
       aws_api_gateway_method.options.id,
       aws_api_gateway_integration.options.id,
       aws_api_gateway_method_response.options_200.id,
-      aws_api_gateway_integration_response.options.id
+      aws_api_gateway_integration_response.options.id,
+      aws_api_gateway_resource.images.id,
+      aws_api_gateway_method.list_get.id,
+      aws_api_gateway_integration.list_lambda.id
     ]))
   }
 
@@ -270,7 +395,8 @@ resource "aws_api_gateway_deployment" "deploy" {
 
   depends_on = [
     aws_api_gateway_integration.lambda,
-    aws_api_gateway_integration.options
+    aws_api_gateway_integration.options,
+    aws_api_gateway_integration.list_lambda
   ]
 }
 

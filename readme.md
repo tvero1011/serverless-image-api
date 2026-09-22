@@ -1,103 +1,87 @@
-![AWS](https://img.shields.io/badge/AWS-Cloud-FF9900?logo=amazonaws)
-![Terraform](https://img.shields.io/badge/Terraform-IaC-623CE4?logo=terraform)
-![Node.js](https://img.shields.io/badge/Node.js-22-339933?logo=node.js)
-![License](https://img.shields.io/badge/License-MIT-green)
+# Serverless Image Upload API
 
-Hands-on serverless application demonstrating Infrastructure as Code (IaC) with Terraform and AWS serverless services.
+Upload an image from a web page and browse everything uploaded so far. Images are
+stored in a private S3 bucket, metadata in DynamoDB. Everything is created with Terraform.
 
----
+**Stack:** S3 (static site + image storage), API Gateway (REST), Lambda (Node.js 22,
+one function per route), DynamoDB (on-demand), IAM, CloudWatch Logs, Terraform.
 
-# Overview
+See [docs/architecture.md](docs/architecture.md) for the diagram.
 
-Serverless Image API is a cloud engineering project that demonstrates how to provision and deploy a serverless image upload application on AWS using Terraform.
-
-A static web page (S3) sends an image to an API (API Gateway). A Lambda function validates it, stores the file in a private S3 bucket, and saves its metadata in DynamoDB. One `terraform apply` builds everything, and `terraform destroy` removes it.
-
-**Stack:** S3, API Gateway (REST), Lambda (Node.js 22), DynamoDB (on-demand), IAM, CloudWatch Logs, Terraform.
-
----
-
-# Architecture
-
-```mermaid
-flowchart LR
-  B[Browser<br/>index.html on S3 website] -->|1. OPTIONS preflight| A[API Gateway REST<br/>/upload]
-  B -->|2. POST JSON base64| A
-  A -->|AWS_PROXY| L[Lambda upload_fn]
-  L -->|PutObject| S[(S3 images bucket<br/>private)]
-  L -->|PutItem| D[(DynamoDB<br/>ImageMetadata)]
-  L -.->|logs| C[CloudWatch Logs]
-```
-
-1. The browser sends an `OPTIONS /upload` CORS preflight. API Gateway answers it with a MOCK integration.
-2. The browser sends `POST /upload` with JSON `{ image (base64), fileName, contentType }`.
-3. Lambda validates the input, saves `uploads/<uuid>.<ext>` to S3, and writes metadata to DynamoDB.
-4. Lambda returns `{ message, imageId }` with CORS headers.
-
----
-
-# Project structure
+## Project layout
 
 ```
 terraform/   main.tf, variables.tf, outputs.tf, provider.tf
-lambda/      uploadimage.js        (function code, zipped by Terraform)
-frontend/    index.html.tpl        (template: Terraform injects the API URL)
-docs/        architecture.md
+lambda/      uploadimage.js       (POST /upload, zipped by Terraform)
+             listimages.js        (GET /images, zipped by Terraform)
+frontend/    index.html.tpl       (template; Terraform injects both API URLs)
 ```
 
----
+## How a request flows
 
-# Deploy
+**Upload — `POST /upload`**
+1. Browser sends `OPTIONS /upload` (CORS preflight). API Gateway answers it with a MOCK integration.
+2. Browser sends `POST /upload` with JSON `{ image (base64), fileName, contentType }`.
+3. API Gateway invokes `upload_fn` (proxy integration).
+4. Lambda validates input, saves `uploads/<uuid>.<ext>` to S3, saves metadata to DynamoDB.
+5. Lambda returns `{ message, imageId }` with CORS headers.
 
-Prerequisites: Terraform >= 1.5 and an AWS CLI profile (the default profile name is `tf-dev`).
+**Gallery — `GET /images`**
+1. Browser sends `GET /images?limit=24` (a CORS "simple request" — no preflight).
+2. API Gateway invokes `list_images_fn` (proxy integration).
+3. Lambda `Scan`s the DynamoDB table (up to `limit`, max 50) and, for each item, generates a
+   5-minute presigned S3 `GetObject` URL — the images bucket itself is never made public.
+4. Lambda returns `{ images: [...], nextCursor }` with CORS headers. `nextCursor` (pass it back
+   as `?cursor=`) is `null` once there's nothing left to page through.
+
+## Deploy
+
+Prerequisites: Terraform >= 1.5, AWS CLI configured with a profile (default name `tf-dev`).
 
 ```bash
-git clone https://github.com/tvero1011/serverless-image-api.git
-cd serverless-image-api/terraform
+cd terraform
 terraform init
 terraform apply -var="aws_profile=YOUR_PROFILE"
 ```
 
-S3 bucket names are globally unique. If you get `BucketAlreadyExists`, pass your own:
-`-var="frontend_bucket_name=..." -var="images_bucket_name=..."`
+Bucket names are globally unique. If apply fails with `BucketAlreadyExists`, pass your own:
+`-var="frontend_bucket_name=..." -var="images_bucket_name=..."`.
 
-Terraform prints `frontend_url` (open it in a browser) and `api_gateway_url`.
+Terraform prints `frontend_url` (open it) and `api_gateway_url`.
 
----
-
-# Test the API
+## Test the API (bash)
 
 ```bash
-curl -X POST "<api_gateway_url>" \
+# Upload
+curl -X POST "<api_gateway_url>/upload" \
   -H "Content-Type: application/json" \
   -d '{"image":"<base64>","fileName":"test.png","contentType":"image/png"}'
+
+# List
+curl "<api_gateway_url>/images?limit=10"
 ```
 
-On Windows PowerShell use `curl.exe` (plain `curl` is an alias for `Invoke-WebRequest` and rejects `-X`).
-Then check S3 for `uploads/...` and DynamoDB for the metadata item.
+On Windows PowerShell use `curl.exe` (plain `curl` is an alias for Invoke-WebRequest and does not accept `-X`).
+Then check the S3 bucket for `uploads/...` and the DynamoDB table for the metadata item.
 
----
+## Limits and design choices
 
-# Design decisions
+- Max image size 4 MB: Lambda accepts 6 MB request payloads and base64 adds about 33%.
+- Allowed types: png, jpeg, gif, webp. IDs are server-generated UUIDs.
+- `GET /images` defaults to 20 results per page (`?limit=`, capped at 50) and pages with an
+  opaque `?cursor=` token. It reads with a DynamoDB `Scan`, so pages aren't guaranteed to be
+  in upload order and this won't scale past a small table — see docs/architecture.md.
+- Presigned image URLs returned by `GET /images` expire after 5 minutes.
+- The API is public (no auth) with stage throttling (5 req/s, burst 10). Demo only.
 
-- **Max image size 4 MB:** Lambda accepts 6 MB request payloads and base64 adds about 33%.
-- **Validation:** allow-listed image types, size cap, server-generated UUID keys (no overwrites, no path tricks).
-- **Least-privilege IAM:** the Lambda can only `PutObject` on the images bucket, `PutItem` on the table, and write its own logs.
-- **Private images bucket:** all public access blocked. Only the frontend bucket is public.
-- **Throttling:** 5 requests/second (burst 10) on the API stage.
-- **Deployment order:** `create_before_destroy` on the API deployment avoids the "active stages" deadlock.
-
----
-
-# Cleanup
+## Cleanup
 
 ```bash
 terraform destroy -var="aws_profile=YOUR_PROFILE"
 ```
 
----
+## Known gaps / next steps
 
-# Known limitations and next steps
-
-The API is public (no authentication) and the frontend is HTTP only. Planned improvements: presigned-URL uploads,
-CloudFront + HTTPS, API key or Cognito auth, remote Terraform state, GitHub Actions CI/CD, CloudWatch alarms, tests.
+Presigned-URL uploads for large files, a GSI so `GET /images` can `Query` in upload order
+instead of `Scan`, CloudFront + HTTPS for the frontend, API key or Cognito auth, WAF, remote
+Terraform state, CI/CD with GitHub Actions (OIDC), CloudWatch alarms, tests.

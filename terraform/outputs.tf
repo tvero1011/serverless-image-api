@@ -11,3 +11,8 @@ output "frontend_url" {
 output "images_bucket_name" {
   value = aws_s3_bucket.images.bucket
 }
+
+output "list_images_url" {
+  description = "GET this URL (optionally with ?limit=&cursor=) for the gallery JSON"
+  value       = "${aws_api_gateway_stage.prod.invoke_url}/images"
+}

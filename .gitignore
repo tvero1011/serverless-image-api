@@ -4,7 +4,8 @@
 *.tfstate.*
 crash.log
 *.tfvars
-# Build artifact created by the archive_file data source
+# Build artifacts created by the archive_file data source
 terraform/uploadimage.zip
+terraform/listimages.zip
 # Node
 node_modules/

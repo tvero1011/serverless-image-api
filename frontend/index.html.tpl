@@ -54,12 +54,6 @@
         statusDiv.style.color = color;
     }
 
-    function escapeHtml(str) {
-        const div = document.createElement("div");
-        div.innerText = str;
-        return div.innerHTML;
-    }
-
     async function loadGallery() {
         galleryStatusDiv.innerText = "Loading...";
         try {
@@ -73,9 +67,17 @@
             for (const img of json.images) {
                 const el = document.createElement("div");
                 el.className = "thumb";
-                el.innerHTML =
-                    '<img src="' + img.url + '" alt="' + escapeHtml(img.originalName) + '" loading="lazy" />' +
-                    '<span title="' + escapeHtml(img.originalName) + '">' + escapeHtml(img.originalName) + '</span>';
+
+                const imgEl = document.createElement("img");
+                imgEl.src = img.url;
+                imgEl.alt = img.originalName;
+                imgEl.loading = "lazy";
+
+                const label = document.createElement("span");
+                label.textContent = img.originalName;
+                label.title = img.originalName;
+
+                el.append(imgEl, label);
                 galleryDiv.appendChild(el);
             }
             galleryStatusDiv.innerText = json.images.length

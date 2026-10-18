@@ -40,8 +40,8 @@ resource "aws_s3_bucket_policy" "frontend_public_read" {
 # so nobody ever copy-pastes the URL by hand again.
 locals {
   index_html = templatefile("${path.module}/../frontend/index.html.tpl", {
-    api_url          = "${aws_api_gateway_stage.prod.invoke_url}/upload"
-    list_images_url  = "${aws_api_gateway_stage.prod.invoke_url}/images"
+    api_url         = "${aws_api_gateway_stage.prod.invoke_url}/upload"
+    list_images_url = "${aws_api_gateway_stage.prod.invoke_url}/images"
   })
 }
 
@@ -258,7 +258,7 @@ resource "aws_api_gateway_method" "post" {
   rest_api_id   = aws_api_gateway_rest_api.api.id
   resource_id   = aws_api_gateway_resource.upload.id
   http_method   = "POST"
-  authorization = "NONE" # public on purpose for the demo; see handbook "known gaps"
+  authorization = "NONE" # public on purpose for the demo; see README "known gaps"
 }
 
 resource "aws_api_gateway_integration" "lambda" {
@@ -335,7 +335,7 @@ resource "aws_api_gateway_method" "list_get" {
   rest_api_id   = aws_api_gateway_rest_api.api.id
   resource_id   = aws_api_gateway_resource.images.id
   http_method   = "GET"
-  authorization = "NONE" # public on purpose for the demo; see handbook "known gaps"
+  authorization = "NONE" # public on purpose for the demo; see README "known gaps"
 
   # ?limit=<n>&cursor=<opaque string> for pagination; both are optional.
   request_parameters = {
@@ -388,7 +388,7 @@ resource "aws_api_gateway_deployment" "deploy" {
   }
 
   # Build the new deployment BEFORE destroying the old one, because the
-  # "prod" stage is still pointing at the old one (your deadlock error).
+  # "prod" stage is still pointing at the old one.
   lifecycle {
     create_before_destroy = true
   }

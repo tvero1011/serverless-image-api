@@ -2,10 +2,24 @@
 .terraform/
 *.tfstate
 *.tfstate.*
-crash.log
 *.tfvars
+*.tfvars.json
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+
 # Build artifacts created by the archive_file data source
 terraform/uploadimage.zip
 terraform/listimages.zip
+
 # Node
 node_modules/
+
+# Secrets and local config
+.env
+.env.*
+
+# OS and editor files
+.DS_Store
+Thumbs.db

@@ -15,7 +15,7 @@ See [docs/architecture.md](docs/architecture.md) for the diagram.
 
 ![Gallery demo](docs/proof/02-gallery-demo.png)
 
-Deployed and tested with Terraform, then destroyed to avoid charges; redeploy with one `terraform apply`.
+Deployed and tested with Terraform, then destroyed to avoid charges; redeploy with one `terraform apply`. Nothing is running now.
 
 | Proof | What it shows |
 |-------|---------------|
@@ -55,7 +55,7 @@ docs/        architecture.md, proof/ (screenshots)
 
 ## Deploy
 
-Prerequisites: Terraform >= 1.5, and an AWS account where you can create S3, API Gateway,
+Prerequisites: Terraform >= 1.5 (AWS provider >= 5.70 and < 7.0), and an AWS account where you can create S3, API Gateway,
 Lambda, DynamoDB, IAM and CloudWatch resources. Use an AWS CLI profile (default name `tf-dev`);
 if it's an SSO profile, run `aws sso login --profile YOUR_PROFILE` first.
 
@@ -132,6 +132,7 @@ try { Invoke-RestMethod -Method Post -Uri $url -ContentType "application/json" -
 
 ## Limits and design choices
 
+- Both Lambdas run Node.js 22 with 256 MB memory and a 10 second timeout. Logs are kept 14 days.
 - Max image size 4 MB: Lambda accepts 6 MB request payloads and base64 adds about 33%.
 - Allowed types: png, jpeg, gif, webp. The file's leading bytes (magic bytes) are checked
   against the declared type, so a renamed text file is rejected. Non-object request bodies
@@ -186,6 +187,8 @@ when you're done. The images bucket uses `force_destroy`, so uploaded test image
   sort key would give upload-ordered results that scale.
 - **Local Terraform state:** fine for one person; a team would use an S3 backend with locking.
 - **No automated application tests yet.** CI covers Terraform formatting and validation only.
+- **No alarms or budget alert in the code.** CloudWatch alarms on Lambda errors, API 5XX and throttles are a next step.
+- **CI uses `ubuntu-latest`.** GitHub scheduled that label to move to Ubuntu 26.04 between 19 October and 19 November 2026. If the check fails, pin `ubuntu-24.04`.
 
 **Next steps:** CloudFront + HTTPS for the frontend, Cognito auth, WAF, presigned-URL uploads
 for large files, remote Terraform state, automated deployment with GitHub Actions (OIDC),
